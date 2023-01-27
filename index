@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Display a map on a webpage</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        #infoDiv {
+            font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            background-color: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+            position: absolute;
+            width: fit-content;
+            top: 10px;
+            left: 10px;
+            padding: 10px;
+            z-index: 100;
+        }
+
+
+        .switcher-div {
+            display: flex;
+            align-items: center;
+            margin: 5px;
+        }
+
+        .switcher-div>div {
+            margin-left: 5px;
+        }
+
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 35px;
+            height: 15px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            -webkit-transition: 0.4s;
+            transition: 0.4s;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 11px;
+            width: 11px;
+            left: 3px;
+            bottom: 2px;
+            background-color: white;
+            -webkit-transition: 0.4s;
+            transition: 0.4s;
+        }
+
+        input:checked+.slider {
+            background-color: #2196f3;
+        }
+
+        input:focus+.slider {
+            box-shadow: 0 0 1px #2196f3;
+        }
+
+        input:checked+.slider:before {
+            -webkit-transform: translateX(18px);
+            -ms-transform: translateX(18px);
+            transform: translateX(18px);
+        }
+
+        /* Rounded sliders */
+        .slider.round {
+            border-radius: 34px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+
+        #loading {
+            background-color: white;
+            position: absolute;
+            border-radius: 10px;
+            z-index: 10;
+            padding: 20px;
+            font-size: 20px;
+
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .mapboxgl-popup {
+            max-width: 350px !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="infoDiv">
+        <h2>Immersive Spaces</h2>
+    </div>
+    <div id="map"></div>
+    <script>
+        const switchersEnableDiv = document.getElementById("infoDiv")
+        const main = {
+            data: [],
+            filters: new Set()
+        };
+
+        const colors = [
+            { color: "red", name: 'Art Gallery' },
+            { color: "green", name: 'Cultural & Social Center' },
+            { color: "blue", name: 'Empty Space' },
+            { color: "yellow", name: 'Entertainment Venue' },
+            { color: "orange", name: 'Exhibitor' },
+            { color: "pink", name: 'Gaming Space' },
+            { color: "violet", name: 'Museum' },
+            { color: "Purple", name: 'Retail Venue' },
+            { color: "navy", name: 'Theather & Cinema' },
+            { color: "aqua", name: 'Festivals' }
+        ]
+
+        mapboxgl.accessToken = 'pk.eyJ1IjoiZ2FyYWdlc3RvcmllcyIsImEiOiJjbDd1ejUzZnQwNmdlM29vNnlwbzMydGFiIn0.QCfYzbFZjibYumdnCySUdw';
+        const map = new mapboxgl.Map({
+            container: 'map', // container ID
+            // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
+            style: 'mapbox://styles/garagestories/cl986sedr000b14pfcxo9sh6f', // style URL
+            center: { lng: -93.96296981728125, lat: 40.83926754150136 }, // starting position [lng, lat]
+            zoom: 3.4504236290207815, // starting zoom
+            // projection: 'globe' // display the map as a 3D globe
+        });
+        map.addControl(new mapboxgl.NavigationControl());
+
+
+        map.on('style.load', () => {
+
+            map.setFilter("settlement-major-label", ['in', 'name', ""])
+            map.setFilter("settlement-major-label", ['in', 'name', ""])
+            map.setFilter("poi-label", ['in', 'name', ""]) //  remove poi
+
+            d3.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQBvstvSh5604AbKjeQj_WOpek94K868qD8LZZuz_cWUfG-cI5YYOfGLSje7ZP3ThUEqTUMa1INGNWV/pub?gid=1186833163&single=true&output=csv")
+                .then(json => {
+                    console.log('json', json);
+                    const features = json.map(pin => {
+                        const { LATITUDE: lat, LONGITUDE: lon } = pin
+                        console.log('pin', pin);
+                        const color = colors.find(d => d.name.toLowerCase() === pin['VENUE TYPE'].toLowerCase())
+                        return turf.point([+lon, +lat], {
+                            color: color ? color.color : "black",
+                            icon_image: pin['VENUE TYPE'].toLowerCase() + "-u",
+                            ...pin
+                        })
+                    })
+                    const collection = turf.featureCollection(features)
+                    console.log('collection', collection);
+                    map.getSource("main").setData(collection)
+                    main.data.push(...features)
+
+                    const venue = [...new Set(json.map(pin => pin['VENUE TYPE']))]
+                    const cities = [...new Set(json.map(pin => pin.CITY))]
+
+                    // fillDropDown(venue, id => {
+                    //     console.log('id', id);
+
+                    //     const filtered = collection.features.filter(d => d.properties.VENUE === id)
+                    //     const collectionFiltered = turf.featureCollection(filtered)
+                    //     map.getSource("main").setData(collectionFiltered)
+                    // })
+                    switchersEnableDiv.appendChild(buildSwitcher("Select All / Deselect All", checked => {
+                        document.getElementsByTagName("input")
+                        if (checked) {
+                            colors.forEach(d => main.filters.add(d.name))
+                            document.querySelectorAll(".checkbox").forEach(d => d.checked = true)
+                        } else {
+                            main.filters.clear()
+                            document.querySelectorAll(".checkbox").forEach(d => d.checked = false)
+                        }
+                        //update pins 
+                        const filteredPins = main.data.filter(d => main.filters.has(d.properties['VENUE TYPE'])).map(d => d)
+                        map.getSource("main").setData(turf.featureCollection(filteredPins))
+                    }, true))
+
+
+                    venue.map(d => {
+                        main.filters.add(d)
+                        switchersEnableDiv.appendChild(buildSwitcher(d, checked => {
+                            if (checked) {
+                                main.filters.add(d)
+                            } else {
+                                main.filters.delete(d)
+                            }
+                            //update pins 
+                            const filteredPins = main.data.filter(d => main.filters.has(d.properties['VENUE TYPE'])).map(d => d)
+                            map.getSource("main").setData(turf.featureCollection(filteredPins))
+                        }, true))
+                    })
+
+
+
+                    map.setFilter("settlement-minor-label", ['in', 'name', ...cities])
+
+                    // venue.forEach(d => {
+                    //     const name = d.toLowerCase();
+                    //     map.loadImage(`icons/${name}.png`, (error, image) => {
+                    //         if (error) {
+                    //             return;
+                    //         } else {
+                    //             console.log('name', name);
+                    //             //add prefix name since museum is already there "-u"
+                    //             map.addImage(name + "-u", image);
+                    //         }
+                    //     })
+                    // })
+                })
+
+            map.addSource('main', {
+                'type': 'geojson',
+                'data': {
+                    'type': 'FeatureCollection',
+                    'features': []
+                }
+            });
+
+            map.addLayer({
+                'id': 'pins',
+                'type': 'circle',
+                'source': 'main',
+                'paint': {
+                    'circle-radius': 12,
+                    "circle-color": ['get', 'color'],
+                    "circle-stroke-color": "#0266ff",
+                    'circle-stroke-width': 3
+                },
+            }, 'settlement-minor-label');
+
+            // map.addLayer({
+            //     'id': 'points',
+            //     'type': 'symbol',
+            //     'source': 'main', // reference the data source
+            //     'layout': {
+            //         'icon-image': ['get', 'icon_image'], // reference the image
+            //         'icon-size': 0.03,
+            //         'icon-ignore-placement': true,
+            //         'icon-allow-overlap': true,
+            //     }
+            // }, 'settlement-minor-label');
+
+            // map.addLayer({
+            //     id: 'storeLogo',
+            //     'type': 'symbol',
+            //     source: 'main',
+            //     'layout': {
+            //         'icon-image': ['get', 'icon_image'], // reference the image
+            //         'icon-size': 0.05,
+            //         'icon-allow-overlap': true,
+            //     }
+            // });
+
+            map.on('click', 'pins', (e) => {
+                // Copy coordinates array.
+                const coordinates = [+e.features[0].properties['LONGITUDE'], +e.features[0].properties['LATITUDE']];
+                const data = e.features[0].properties;
+
+                console.log('e', coordinates);
+                console.log('e', e.features[0].properties);
+
+                // Ensure that if the map is zoomed out such that multiple
+                // copies of the feature are visible, the popup appears
+                // over the copy being pointed to.
+
+                const info = [
+                    'CONTACT',
+                    'CITY',
+                    'DIMENSION',
+                    'PAST EXHIBITIONS',
+                    'PARTNERS',
+                    'INFO'
+                ]
+
+                const infoData = Object.entries(data).filter(d => d[1] && d[1] !== "" && info.includes(d[0])).map(d => {
+                    return `<div>${d[0]}: ${d['1']}</div>`
+                }).join("")
+                const description = `
+                    <div>
+                        <h2>${data['NAME VENUE']}</h2>
+                        <h3>${data['TITTLE']}</h3>
+                        <b>${data['NAME']}</b>
+                        <div><b>${data['VENUE TYPE']}</b></div>
+                        <div>ADDRESS: ${data['ADDRESS']}</div>
+                        <div><a href="${data['WEBSITE']}" target="_blank">${data['WEBSITE']}</a></div>
+                        ${infoData}
+                    </div >
+
+                `
+                new mapboxgl.Popup()
+                    .setLngLat(coordinates)
+                    .setHTML(description)
+                    .addTo(map);
+
+                map.flyTo({
+                    center: coordinates,
+                    zoom: 14
+                });
+            });
+
+            map.on('mouseenter', 'pins', () => {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+            // Change it back to a pointer when it leaves.
+            map.on('mouseleave', 'pins', () => {
+                map.getCanvas().style.cursor = '';
+            });
+
+            map.on('click', 'settlement-minor-label', (e) => {
+                map.flyTo({
+                    center: e.features[0].geometry.coordinates,
+                    zoom: 14
+                });
+            });
+            map.on('mouseenter', 'settlement-minor-label', () => {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+            // Change it back to a pointer when it leaves.
+            map.on('mouseleave', 'settlement-minor-label', () => {
+                map.getCanvas().style.cursor = '';
+            });
+        });
+
+        function fillDropDown(data, action) {
+            console.log('data', data);
+            const selectList = document.createElement("select");
+            selectList.id = "mySelect";
+            infoDiv.appendChild(selectList)
+            selectList.addEventListener("change", d => {
+                const id = selectList.value
+                if (typeof action === "function") {
+                    action(id)
+                }
+            })
+            data
+                .sort((a, b) => a.localeCompare(b))
+                .map(p => {
+                    const option = document.createElement("option");
+                    option.value = p;
+                    option.text = p;
+                    selectList.appendChild(option);
+                })
+
+        }
+
+        function buildSwitcher(labelText, action, checked = true) {
+
+            const div = document.createElement("div")
+            div.className = "switcher-div"
+
+            const label = document.createElement("label")
+            label.className = "switch"
+
+            const checkbox = document.createElement("input")
+            checkbox.type = "checkbox"
+            checkbox.className = "checkbox"
+            checkbox.checked = checked
+            checkbox.addEventListener("input", () => {
+                if (typeof action === "function") {
+                    action(checkbox.checked)
+                }
+            })
+
+            const span = document.createElement("span")
+            span.className = "slider round"
+
+            const pinColor = colors.find(d => d.name.toLowerCase() === labelText.toLowerCase())
+
+            const color = document.createElement("div")
+            color.style.width = "10px"
+            color.style.height = "10px"
+            color.style.backgroundColor = pinColor ? pinColor.color : "black"
+            color.style.borderRadius = "10px"
+            color.style.border = "2px solid #2196f3"
+
+            const text = document.createElement("div")
+            text.innerText = labelText
+
+            label.appendChild(checkbox)
+            label.appendChild(span)
+
+            div.appendChild(label)
+            div.appendChild(color)
+            div.appendChild(text)
+
+            console.log('div', div);
+            return div
+        }
+
+    </script>
+
+</body>
+
+</html>
